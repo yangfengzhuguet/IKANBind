@@ -10,11 +10,9 @@ Download the ESMFold model ([guide](https://github.com/facebookresearch/esm))
 # Run GLMSite for prediction
 Simply run:  
 ```
-python predict.py --dataset_path ../Example/structure_data/ --feature_path ../Example/prottrans/ --input_path ../Example/demo.pkl
+please note：Please download the corresponding model parameters from the link([guide]https://drive.google.com/drive/folders/1fE41iSYFBWfxkYEgjw3kzm1AAnzWJ3oyo
+python main.py 
 ```
-And the prediction results will be saved in  
-```
-../Example/results
-```
+
 
 
