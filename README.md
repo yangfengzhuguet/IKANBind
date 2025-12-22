@@ -11,6 +11,7 @@ Download the ESMFold model ([guide](https://github.com/facebookresearch/esm))
 Simply run:  
 ```
 Please download the corresponding model parameters from the link (https://drive.google.com/drive/folders/1fE41iSYFBWfxkYEgjw3kzm1AAnzWJ3oyo)
+Then run：
 python main.py 
 ```
 
