@@ -10,7 +10,7 @@ Download the ESMFold model ([guide](https://github.com/facebookresearch/esm))
 # Run GLMSite for prediction
 Simply run:  
 ```
-please note：Please download the corresponding model parameters from the link([guide]https://drive.google.com/drive/folders/1fE41iSYFBWfxkYEgjw3kzm1AAnzWJ3oyo
+please note：Please download the corresponding model parameters from the link(([guide](https://drive.google.com/drive/folders/1fE41iSYFBWfxkYEgjw3kzm1AAnzWJ3oyo))
 python main.py 
 ```
 
