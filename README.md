@@ -4,8 +4,8 @@
 You need to prepare the pretrained language model ProtTrans to run IKANBind:  
 Download the pretrained ProtT5-XL-UniRef50 model ([guide](https://github.com/agemagician/ProtTrans)).  
 # ESM-2
-You need to prepare the pretrained language model ProtTrans to run IKANBind:  
-Download the pretrained ProtT5-XL-UniRef50 model ([guide](https://github.com/facebookresearch/esm)).  
+You need to prepare the pretrained language model ESM-2 to run IKANBind:  
+Download the pretrained ESM-2 model ([guide](https://github.com/facebookresearch/esm)).  
 # ESMFold
 The protein structures should be predicted by ESMFold to run IKANBind:  
 Download the ESMFold model ([guide](https://github.com/facebookresearch/esm))  
