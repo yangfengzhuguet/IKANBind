@@ -1,4 +1,5 @@
 # IKANBind：Protein–Nucleic Acid Binding Site Prediction Using Kolmogorov–Arnold Networks with Hypergraph Representation Learning
+IKANBind is a computational framework for predicting protein-nucleic acid binding sites. IKANBind constructs a hypergraph based on structures predicted by ESMFold and incorporates embeddings from protein language models (PLMs) to supplement the limitations of traditional handcrafted features. To further describe the nonlinear mapping between input features and input probabilities, we employ Kolmogorov-Arnold Networks (KANs) as our classifier. To enhance the readability of model decisions, IKANBind uses mathematically meaningful functions instead of B-spline functions as basis functions for KANs. IKANBind effectively reflects the interactions between features and different basis functions, a result consistent with SHAP and LIME_stability. Furthermore, IKANBind also performs well on other ligand-binding residues.
 ![image](https://github.com/yangfengzhuguet/IKANBind/blob/main/workflow.jpg)
 # ProtTrans
 You need to prepare the pretrained language model ProtTrans to run IKANBind:  
