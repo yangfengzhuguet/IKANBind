@@ -50,7 +50,7 @@ def mian():
         train_dataSet = utils.ProDataset(train_data)
         valid_dataset = utils.ProDataset(valid_data)
 
-        best_epoch, valid_mcc, val_acc, val_spe, val_pre, val_recall, val_f1, val_auc, val_pr_auc = Train.Train(Model, train_dataSet, valid_dataset, 10, optimizer, 1)# 10
+        best_epoch, valid_mcc, val_acc, val_spe, val_pre, val_recall, val_f1, val_auc, val_pr_auc = Train.Train(Model, train_dataSet, valid_dataset, 30, optimizer, 1)# 10
         best_epochs.append(str(best_epoch))
         valid_mccs.append(valid_mcc)
         valid_accs.append(val_acc)
@@ -87,6 +87,7 @@ def mian():
 
 if __name__ == '__main__':
       mian()
+
 
 
 
