@@ -13,7 +13,6 @@ from SymbolicKANLinear import *
 import os
 os.environ['CUDA_LAUNCH_BLOCKING'] = '0'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
 # Gated self-attention mechanism
 class Attention_1(nn.Module):
     def __init__(self, hidden_size, num_attention_heads):
@@ -65,46 +64,59 @@ class Attention_1(nn.Module):
         batch_outputs = batch_outputs
 
         return batch_outputs, attn_scores
+class EfficientHypergraphAttention(nn.Module):
+    def __init__(self, in_dim, out_dim, alpha=0.2, dropout=0.2):
+        super().__init__()
+        self.P = nn.Linear(in_dim, out_dim, bias=False)
+        self.a = nn.Parameter(torch.empty(2 * out_dim, 1))
+        nn.init.xavier_uniform_(self.a, gain=1.414)
 
-class HypergraphAttentionConv(nn.Module):
-    def __init__(self, in_features, out_features, dropout=0.2, alpha=0.2):
-        super(HypergraphAttentionConv, self).__init__()
-        self.in_features = in_features
-        self.out_features = out_features
+        self.leakyrelu = nn.LeakyReLU(alpha)
         self.dropout = dropout
-        self.alpha = alpha
 
-        # Node feature linear mapping
-        self.W = nn.Parameter(torch.empty(in_features, out_features))
-        nn.init.xavier_uniform_(self.W.data, gain=1.414)
+    def forward(self, X, H, W_e=None):
+        eps = 1e-9
+        N, E = H.shape
+        device = X.device
 
-        # Attention Mechanism Parameters
-        self.a = nn.Parameter(torch.empty(2 * out_features, 1))
-        nn.init.xavier_uniform_(self.a.data, gain=1.414)
+        Z = self.P(X)  # [N, F]
 
-        self.leakyrelu = nn.LeakyReLU(self.alpha)
+        # -------- Hyperedge feature --------
+        edge_deg = H.sum(dim=0) + eps
+        edge_feat = (H.t() @ Z) / edge_deg.unsqueeze(1)  # [E, F]
 
-    def forward(self, X, H):
-        # X: [N, F] node features; H: [N, E] node-hyperedge association matrix
-        Wh = torch.matmul(X, self.W)  # [N, F']
-        E = H.shape[1]
+        # -------- Sparse attention --------
+        idx_i, idx_e = H.nonzero(as_tuple=True)
+        zi = Z[idx_i]
+        he = edge_feat[idx_e]
 
-        # Features of each hyperedge (average connected node features)
-        edge_feat = torch.mm(H.T, Wh) / (H.T.sum(dim=1, keepdim=True) + 1e-9)  # [E, F']
+        e = self.leakyrelu(
+            torch.cat([zi, he], dim=1) @ self.a
+        ).squeeze()
 
-        # The attention score is calculated by concatenating the features of the node and its connected hyperedges
-        node_edge_feat = torch.matmul(H, edge_feat)  # [N, F']
-        concat_feat = torch.cat([Wh, node_edge_feat], dim=1)  # [N, 2F']
-        e = self.leakyrelu(torch.matmul(concat_feat, self.a)).squeeze(1)  # [N]
+        H_c = torch.zeros_like(H)
+        H_c[idx_i, idx_e] = e
 
-        # Normalized attention weights in node dimensions
-        att = H * e.unsqueeze(1)  # [N, E]
-        att = F.softmax(att, dim=1)
-        att = F.dropout(att, self.dropout, training=self.training)
+        H_c = F.softmax(H_c, dim=1)
+        H_c = F.dropout(H_c, self.dropout, training=self.training)
 
-        # aggregation
-        h_out = torch.matmul(att, edge_feat)  # [N, F']
-        return F.relu(h_out)
+        if W_e is None:
+            W_e = torch.ones(E, device=device)
+
+        D = H_c @ W_e + eps
+        B = H_c.sum(dim=0) + eps
+
+        D_inv_sqrt = D.pow(-0.5)
+        B_inv = B.pow(-1.0)
+
+        # -------- Node → Hyperedge --------
+        Z1 = (H_c.t() * B_inv.unsqueeze(1)) @ (D_inv_sqrt.unsqueeze(1) * Z)
+
+        # -------- Hyperedge → Node --------
+        X_next = (H_c * W_e.unsqueeze(0)) @ Z1
+        X_next = D_inv_sqrt.unsqueeze(1) * X_next
+
+        return F.elu(X_next)
 
 class HGNN_conv(nn.Module):
     def __init__(self, in_ft, out_ft, bias=True):
@@ -130,23 +142,6 @@ class HGNN_conv(nn.Module):
         x = G.matmul(x)
         return x
 
-
-class KAN(nn.Module): # custom function
-    def __init__(self):
-        super(KAN, self).__init__()
-        self.kanlayer1 = KANLinear(256, 128, num_basis=10)
-        self.kanlayer2 = KANLinear(128, 64, num_basis=10)
-        self.kanlayer3 = KANLinear(64, 1, num_basis=10)
-        self.LayerNorm = torch.nn.LayerNorm(256)
-        #  960822
-        # self.kanlayer4 = KANLinear(256, 1)
-
-    def forward(self, feat):
-        pair_feat2 = self.kanlayer1(feat)
-        pair_feat3 = self.kanlayer2(pair_feat2)
-        pair_feat4 = self.kanlayer3(pair_feat3)
-        return torch.sigmoid(pair_feat4)
-
 class MLP(nn.Module):
     def __init__(self):
         super(MLP, self).__init__()
@@ -157,25 +152,39 @@ class MLP(nn.Module):
         self.linear4 = nn.Linear(256, 1, bias=True)
 
     def forward(self, feat):
+        # feat = self.LayerNorm(feat)
         pair_feat2 = F.relu(self.linear1(feat))
         pair_feat3 = F.relu(self.linear2(pair_feat2))
         pair_feat4 = self.linear3(pair_feat3)
+        # pair_feat4 = self.linear4(feat)
         return torch.sigmoid(pair_feat4)
+
+class KAN(nn.Module): # custom function
+    def __init__(self):
+        super(KAN, self).__init__()
+        self.kanlayer1 = KANLinear(256, 128, num_basis=10) # 10
+        self.kanlayer2 = KANLinear(128, 64, num_basis=10) # 10
+        self.kanlayer3 = KANLinear(64, 1, num_basis=10) # 10
+        self.LayerNorm = torch.nn.LayerNorm(256)
+
+    def forward(self, feat):
+        pair_feat2 = self.kanlayer1(feat)
+        pair_feat3 = self.kanlayer2(pair_feat2)
+        pair_feat4 = self.kanlayer3(pair_feat3)
+        return torch.sigmoid(pair_feat4), pair_feat3
 
 class HGNN(nn.Module):
     def __init__(self, n_feat, hidden_dim, out_dim):
         super(HGNN, self).__init__()
         self.hgcn1 = HGNN_conv(n_feat, hidden_dim)
         self.hgcn2 = HGNN_conv(hidden_dim, out_dim)
-        self.hgac1 = HypergraphAttentionConv(n_feat, hidden_dim)
-        self.hgac2 = HypergraphAttentionConv(hidden_dim, 128)
-        self.res = nn.Linear(n_feat, out_dim)
+        self.hgac1 = EfficientHypergraphAttention(n_feat, hidden_dim)
+        self.hgac2 = EfficientHypergraphAttention(hidden_dim, 128)
         self.multihead_attention = nn.ModuleList([Attention_1(hidden_size=256 + 128, num_attention_heads=16) for _ in range(8)])
-        self.cnn1 = nn.Conv1d(n_feat, 512, kernel_size=1)
-        self.cnn2 = nn.Conv1d(512, 256, kernel_size=1)
+        self.res = nn.Linear(n_feat, out_dim)
         self.KAN = KAN()
         self.MLP = MLP()
-        self.fc1 = nn.Linear((256 + 128) * 8, 256)
+        self.fc1 = nn.Linear((256 + 128), 256)
 
     def forward(self, X, G, H):
         x_residual = X
@@ -192,20 +201,14 @@ class HGNN(nn.Module):
 
         fea = torch.cat([feat_update_11, feat_update_22], dim=2)
 
-        # gated self-attention
-        attention_outputs = []
-        attn_list = [] # 计算注意力
-        for i in range(len(self.multihead_attention)):
-            multihead_output, attn_scores = self.multihead_attention[i](fea)
-            attention_outputs.append(multihead_output)
-            attn_list.append(attn_scores)
 
-        embeddings = torch.cat(attention_outputs, dim=2)
-
-        embeddings = F.relu(self.fc1(embeddings))
+        embeddings = F.relu(self.fc1(fea))
         embeddings = embeddings.squeeze(0)
         embeddings = x_residual + embeddings
+
 
         pred = self.KAN(embeddings)
 
         return pred
+
+
